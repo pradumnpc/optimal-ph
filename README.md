@@ -1,4 +1,5 @@
-# Optimal-pH
+# Optimal-pH 
+## Team ProteinHikers
 
 The Optimal-pH challenge from [Copenhagen Bioinformatics Hackathon: 2021 Protein Edition](https://biohackathon.dk). 
 
