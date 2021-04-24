@@ -1,4 +1,4 @@
-from sklearn import tree
+from sklearn.svm import SVR
 import numpy as np
 import pickle
 
@@ -15,7 +15,7 @@ class BaselineModel:
         X = self.vectorize_sequences(df_train['sequence'].to_numpy())
         y = df_train['mean_growth_PH'].to_numpy()
 
-        model = tree.DecisionTreeRegressor()
+        model = SVR()
         model.fit(X, y)
 
         with open(self.model_file_path, 'wb') as model_file:
