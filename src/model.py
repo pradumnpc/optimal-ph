@@ -1,7 +1,11 @@
-from sklearn.svm import SVR
+from sklearn import tree
 import numpy as np
 import pickle
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV
 
 class BaselineModel:
     def __init__(self, model_file_path):
@@ -13,6 +17,7 @@ class BaselineModel:
         
     def seq_features(self, seq):
         aacode_1 = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
+        seq = seq.replace('X','A')
         features = []
         
         analysed_seq = ProteinAnalysis(seq)
@@ -53,7 +58,7 @@ class BaselineModel:
         # Vectorize
         #vectorize_on_ss = np.vectorize(self.ss_features, signature='()->(k)')# This was trial
         vectorize_on_length = np.vectorize(len)
-        vectorize_on_seq = np.vectorize(self.seq_features, signature='()->(k)') # () singal dim  
+        vectorize_on_seq = np.vectorize(self.seq_features, signature='()->(k)')
         vectorize_on_seq_cat6 = np.vectorize(self.seq_cat6_features, signature='()->(k)')
         vectorize_on_get_nterm_seq = np.vectorize(self.get_nterm_seq)
         vectorize_on_get_cterm_seq = np.vectorize(self.get_cterm_seq)
@@ -75,34 +80,104 @@ class BaselineModel:
         #print(ss_vector[:5])
         #print(seq_vector[:5])
         
-#         print("Shapes of individual vectors:",
-#               len_vector.shape, seq_vector.shape, seq_cat6_vector.shape,
-#               nterm_seq_vector.shape, cterm_seq_vector.shape)
+        #print("Shapes of individual vectors:",
+        #      len_vector.shape, seq_vector.shape, seq_cat6_vector.shape,
+        #      nterm_seq_vector.shape, cterm_seq_vector.shape)
         
         # Concatenate features into one array
         fv = np.concatenate((len_vector, seq_vector, seq_cat6_vector, nterm_seq_vector, cterm_seq_vector), axis=1)
         
         # Concatenate extra features to the feature vector
         if extra_features is not None:
-	        fv = np.concatenate((fv, extra_features.to_numpy()), axis=1)
-#         print("Shape of feature vector:", fv.shape)
+            #print(extra_features.shape)
+            fv = np.concatenate((fv, extra_features.to_numpy()), axis=1)
+
+        #print("Shape of feature vector:", fv.shape)
         #print(fv[:5])
         
         return(fv)
 
-    def train(self, df_train, extra_features=None):
-        df = df_train.copy()
+    def parameter_tuning(self, model, X, y, distributions, mode='RANDOM_SEARCH', verbose=0):
+        if mode == 'RANDOM_SEARCH':
+            mdl = RandomizedSearchCV(estimator=model, param_distributions=distributions, verbose=verbose, n_jobs=4, random_state=62)
+            search = mdl.fit(X, y)
         
-        #print(df_train.head())
+        if mode == 'GRID_SEARCH':
+            mdl = GridSearchCV(estimator=model, param_grid=distributions, verbose=verbose, n_jobs=4)
+            search = mdl.fit(X, y)
+            
+        return(search)
+
+    def train(self, df_train, extra_features=None, mode='TRAIN', search_mode='RANDOM_SEARCH', model_type='DecisionTreeRegressor', verbose=0):
+        log = open('train_'+model_type+'.log', 'w')
+        
         X = self.vectorize_sequences(df_train['sequence'].to_numpy(), extra_features=extra_features)
         y = df_train['mean_growth_PH'].to_numpy()
 
-#         print("X.shape =", X.shape)
-        model = SVR()
-        model.fit(X, y)
+        log.write("X.shape =" + str(X.shape))
+        log.write("\n\n")
 
-        with open(self.model_file_path, 'wb') as model_file:
-            pickle.dump(model, model_file)
+
+        # TRY DIFFERENT MODELS
+        if model_type == 'DecisionTreeRegressor':
+            model = tree.DecisionTreeRegressor()
+            distributions = dict(max_depth = [2,3,5,7],
+                                 min_samples_split = [2,5],
+                                 min_samples_leaf = [1,3,5],
+                                 max_features = ['auto','sqrt']
+                                )
+				
+        if model_type == 'RandomForestRegressor':
+            model = RandomForestRegressor(random_state=62)
+            distributions = dict(n_estimators = [50,100,200,300],
+                                 max_depth = [2,5,7,13],
+                                 min_samples_split = [2,5],
+                                 min_samples_leaf = [1,3,5,9],
+                                 max_features = ['auto','sqrt'],
+                                 oob_score=[True],
+                                 random_state=[62]
+                                )
+
+        if model_type == 'GradientBoostingRegressor':
+            model = GradientBoostingRegressor(random_state=62)
+            distributions = dict(n_estimators = [50,100,200,300],
+                                 max_depth = [2,3,5,7],
+                                 min_samples_split = [2,5],
+                                 min_samples_leaf = [1,3,5,9],
+                                 max_features = ['auto','sqrt'],
+                                 random_state=[62]
+                                )
+
+                
+        if mode == 'TUNE' or mode == 'TUNE_AND_TRAIN':
+            search = self.parameter_tuning(model, X, y, distributions, mode=search_mode, verbose=verbose)
+            model = search.best_estimator_
+
+            log.write("best_estimator_:\n")
+            log.write(str(search.best_estimator_))
+            log.write("\n\n")
+            log.write("cv_results_:\n")
+            log.write(str(search.cv_results_))
+            log.write("\n\n")
+            log.write("best_params_:\n")
+            log.write(str(search.best_params_))
+            log.write("\n\n")
+            log.write("best_score_:\n")
+            log.write(str(search.best_score_))
+            log.write("\n\n")
+        
+        
+        if mode == 'TRAIN' or mode == 'TUNE_AND_TRAIN':
+            model.fit(X, y)
+            score = model.score(X, y)
+
+            log.write("Trained model score =" + str(score))
+            log.write("\n\n")
+
+            with open(self.model_file_path, 'wb') as model_file:
+                pickle.dump(model, model_file)
+
+        log.close()
 
     def predict(self, df_test):
         with open(self.model_file_path, 'rb') as model_file:
