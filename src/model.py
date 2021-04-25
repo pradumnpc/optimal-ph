@@ -121,7 +121,7 @@ class BaselineModel:
         # TRY DIFFERENT MODELS
         if model_type == 'DecisionTreeRegressor':
             model = tree.DecisionTreeRegressor()
-            distributions = dict(max_depth = [2,3,5,7],
+            distributions = dict(max_depth = [2,3,5,7], 
                                  min_samples_split = [2,5],
                                  min_samples_leaf = [1,3,5],
                                  max_features = ['auto','sqrt']
@@ -139,14 +139,9 @@ class BaselineModel:
                                 )
 
         if model_type == 'GradientBoostingRegressor':
-            model = GradientBoostingRegressor(random_state=62)
-            distributions = dict(n_estimators = [50,100,200,300],
-                                 max_depth = [2,3,5,7],
-                                 min_samples_split = [2,5],
-                                 min_samples_leaf = [1,3,5,9],
-                                 max_features = ['auto','sqrt'],
-                                 random_state=[62]
-                                )
+            model = GradientBoostingRegressor(max_depth=7,max_features='sqrt', min_samples_leaf=5, 
+                                              min_samples_split=2, n_estimators=300,
+                                              random_state=62, verbose=0, warm_start=False)
 
                 
         if mode == 'TUNE' or mode == 'TUNE_AND_TRAIN':
@@ -179,10 +174,10 @@ class BaselineModel:
 
         log.close()
 
-    def predict(self, df_test):
+    def predict(self, df_test,extra_features=None):
         with open(self.model_file_path, 'rb') as model_file:
             model: tree.DecisionTreeRegressor = pickle.load(model_file)
 
         X = df_test['sequence'].to_numpy()
-        X_vectorized = self.vectorize_sequences(X)
+        X_vectorized = self.vectorize_sequences(X,extra_features=extra_features)
         return model.predict(X_vectorized)

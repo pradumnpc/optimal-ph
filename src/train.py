@@ -24,7 +24,7 @@ df_iupred_test = df_iupred.iloc[df_test.index]
 # extra_features is optional
 # model_type can be 'DecisionTreeRegressor', 'RandomForestRegressor', 'GradientBoostingRegressor'
 BaselineModel(model_file_path='src/model.pickle').train(df_train, extra_features=df_iupred_train,
-                                                        mode='TUNE_AND_TRAIN',
+                                                        mode='TRAIN',
                                                         search_mode='GRID_SEARCH',
-                                                        model_type='DecisionTreeRegressor',
+                                                        model_type='GradientBoostingRegressor',
                                                         verbose=1)
